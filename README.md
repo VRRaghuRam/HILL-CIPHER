@@ -33,74 +33,120 @@ STEP-5: Combine all these groups to get the complete cipher text.
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#define SIZE 100
-int keymat[3][3] = { {1, 2, 1}, {2, 3, 2}, {2, 2, 1} };
-int invkeymat[3][3] = { {-1, 0, 1}, {2, -1, 0}, {-2, 2, -1} };
-char key[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-void toUpperCase(char str[]) {
-for (int i = 0; str[i] != '\0'; i++) {
-if (islower(str[i])) {
-str[i] = toupper(str[i]);
+
+int mod26(int x) {
+    return (x % 26 + 26) % 26;
 }
+
+int modInverse(int det) {
+    det = mod26(det);
+    for (int i = 1; i < 26; i++) {
+        if ((det * i) % 26 == 1)
+            return i;
+    }
+    return -1;
 }
+
+int determinant(int key[3][3]) {
+    int det = 0;
+    det = key[0][0] * (key[1][1]*key[2][2] - key[1][2]*key[2][1])
+        - key[0][1] * (key[1][0]*key[2][2] - key[1][2]*key[2][0])
+        + key[0][2] * (key[1][0]*key[2][1] - key[1][1]*key[2][0]);
+    return mod26(det);
 }
-void padMessage(char msg[]) {
-int n = strlen(msg) % 3;
-if (n != 0) {
-for (int i = 0; i < (3 - n); i++) {
-strcat(msg, "X");
+
+void adjoint(int key[3][3], int adj[3][3]) {
+    adj[0][0] =  (key[1][1]*key[2][2] - key[1][2]*key[2][1]);
+    adj[0][1] = -(key[1][0]*key[2][2] - key[1][2]*key[2][0]);
+    adj[0][2] =  (key[1][0]*key[2][1] - key[1][1]*key[2][0]);
+
+    adj[1][0] = -(key[0][1]*key[2][2] - key[0][2]*key[2][1]);
+    adj[1][1] =  (key[0][0]*key[2][2] - key[0][2]*key[2][0]);
+    adj[1][2] = -(key[0][0]*key[2][1] - key[0][1]*key[2][0]);
+
+    adj[2][0] =  (key[0][1]*key[1][2] - key[0][2]*key[1][1]);
+    adj[2][1] = -(key[0][0]*key[1][2] - key[0][2]*key[1][0]);
+    adj[2][2] =  (key[0][0]*key[1][1] - key[0][1]*key[1][0]);
 }
+
+void inverseKey(int key[3][3], int invKey[3][3]) {
+    int adj[3][3];
+    adjoint(key, adj);
+
+    int det = determinant(key);
+    int detInv = modInverse(det);
+
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            invKey[i][j] = mod26(adj[j][i] * detInv);
 }
-}
-void encode(char a, char b, char c, char ret[]) {
-int posa = a - 'A';
-int posb = b - 'A';
-int posc = c - 'A';
-int x = (posa * keymat[0][0] + posb * keymat[1][0] + posc * keymat[2][0]) % 26;
-int y = (posa * keymat[0][1] + posb * keymat[1][1] + posc * keymat[2][1]) % 26;
-int z = (posa * keymat[0][2] + posb * keymat[1][2] + posc * keymat[2][2]) % 26;
-ret[0] = key[x];
-ret[1] = key[y];
-ret[2] = key[z];
-ret[3] = '\0';
-}
-void decode(char a, char b, char c, char ret[]) {
-int posa = a - 'A';
-int posb = b - 'A';
-int posc = c - 'A';
-int x = (posa * invkeymat[0][0] + posb * invkeymat[1][0] + posc * invkeymat[2][0]) % 26;
-int y = (posa * invkeymat[0][1] + posb * invkeymat[1][1] + posc * invkeymat[2][1]) % 26;
-int z = (posa * invkeymat[0][2] + posb * invkeymat[1][2] + posc * invkeymat[2][2]) % 26;
-ret[0] = key[(x < 0) ? (26 + x) : x];
-ret[1] = key[(y < 0) ? (26 + y) : y];
-ret[2] = key[(z < 0) ? (26 + z) : z];
-ret[3] = '\0';
-}
+
 int main() {
-char msg[SIZE], enc[SIZE] = "", dec[SIZE] = "";
-printf("Enter the message: ");
-fgets(msg, SIZE, stdin);
-msg[strcspn(msg, "\n")] = 0;
-toUpperCase(msg);
-padMessage(msg);
-printf("Padded message: %s\n", msg);
-for (int i = 0; i < strlen(msg); i += 3) {
-char encBlock[4];
-encode(msg[i], msg[i + 1], msg[i + 2], encBlock);
-strcat(enc, encBlock);
+    char plaintext[100], ciphertext[100];
+    int key[3][3], invKey[3][3];
+    int i, j, len;
+
+    printf("Enter plaintext: ");
+    scanf("%s", plaintext);
+
+    for (i = 0; plaintext[i]; i++)
+        plaintext[i] = toupper(plaintext[i]);
+
+    len = strlen(plaintext);
+
+    while (len % 3 != 0) {
+        plaintext[len++] = 'X';
+    }
+    plaintext[len] = '\0';
+
+    printf("Enter 3x3 key matrix:\n");
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            scanf("%d", &key[i][j]);
+
+    int detInv = modInverse(determinant(key));
+    if (detInv == -1) {
+        printf("Key matrix inverse does not exist!\n");
+        return 0;
+    }
+
+    printf("\nEncrypted Text: ");
+    for (i = 0; i < len; i += 3) {
+        int p[3], c[3];
+
+        for (j = 0; j < 3; j++)
+            p[j] = plaintext[i + j] - 'A';
+
+        for (j = 0; j < 3; j++) {
+            c[j] = mod26(key[j][0]*p[0] + key[j][1]*p[1] + key[j][2]*p[2]);
+            ciphertext[i + j] = c[j] + 'A';
+            printf("%c", ciphertext[i + j]);
+        }
+    }
+    ciphertext[len] = '\0';
+
+    inverseKey(key, invKey);
+
+    printf("\nDecrypted Text: ");
+    for (i = 0; i < len; i += 3) {
+        int c[3], p[3];
+
+        for (j = 0; j < 3; j++)
+            c[j] = ciphertext[i + j] - 'A';
+
+        for (j = 0; j < 3; j++) {
+            p[j] = mod26(invKey[j][0]*c[0] + invKey[j][1]*c[1] + invKey[j][2]*c[2]);
+            printf("%c", p[j] + 'A');
+        }
+    }
+
+    return 0;
 }
-printf("Encoded message: %s\n", enc);
-for (int i = 0; i < strlen(enc); i += 3) {
-char decBlock[4];
-decode(enc[i], enc[i + 1], enc[i + 2], decBlock);
-strcat(dec, decBlock);
-}
-printf("Decoded message: %s\n", dec);
-return 0;
-}
+
 ```
 ## OUTPUT
-<img width="1430" height="722" alt="image" src="https://github.com/user-attachments/assets/c0e1de9d-44e9-449e-899c-d22551818ddc" />
+<img width="1516" height="843" alt="image" src="https://github.com/user-attachments/assets/a1c2c373-807f-408a-b0de-f7332762ced3" />
+
 
 
 ## RESULT
